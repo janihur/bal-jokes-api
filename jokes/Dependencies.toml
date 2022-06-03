@@ -196,6 +196,9 @@ dependencies = [
 	{org = "ballerina", name = "jballerina.java"},
 	{org = "ballerina", name = "lang.int"}
 ]
+modules = [
+	{org = "ballerina", packageName = "mime", moduleName = "mime"}
+]
 
 [[package]]
 org = "ballerina"
@@ -244,6 +247,18 @@ dependencies = [
 
 [[package]]
 org = "ballerina"
+name = "test"
+version = "0.0.0"
+scope = "testOnly"
+dependencies = [
+	{org = "ballerina", name = "jballerina.java"}
+]
+modules = [
+	{org = "ballerina", packageName = "test", moduleName = "test"}
+]
+
+[[package]]
+org = "ballerina"
 name = "time"
 version = "2.2.1"
 dependencies = [
@@ -288,6 +303,8 @@ version = "0.1.0"
 dependencies = [
 	{org = "ballerina", name = "http"},
 	{org = "ballerina", name = "log"},
+	{org = "ballerina", name = "mime"},
+	{org = "ballerina", name = "test"},
 	{org = "ballerina", name = "xmldata"},
 	{org = "ballerinai", name = "observe"}
 ]

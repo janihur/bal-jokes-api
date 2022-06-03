@@ -1,6 +1,6 @@
 import ballerina/http;
-import ballerina/xmldata;
 import ballerina/log;
+import ballerina/xmldata;
 
 service /jokes/v1 on new http:Listener(9090) {
     isolated resource function get 'json (string family, int? amount) 
@@ -26,8 +26,9 @@ service /jokes/v1 on new http:Listener(9090) {
         log:printInfo("xml (GET)", family = family, amount = amount);
 
         AllowedResponseType response = impl(family, amount);
+        // TODO conversion functions can be refactored
         if response is http:Ok {
-            // TODO convert to XML
+            response.body = convertJsonToXml(<json>response?.body);
         } else {
             response.body = convertJsonErrorToXmlError(<json>response?.body);
         }
@@ -54,25 +55,33 @@ isolated function impl(string family, int? amount) returns AllowedResponseType {
 // Actual implementation.
 //
 isolated function impl_(string family, int? amount) returns AllowedResponseType {
-    ValidationError? isValidationError = validate(family, amount);
-    if isValidationError is ValidationError {
-        return isValidationError;
+    ValidationError? validationError = validate(family, amount);
+    if validationError is ValidationError {
+        return validationError;
     } else {
-        // TODO the actual implementation will be called here
-        // now just reporting not implemented
-        return buildNotImplementedError();
+        match family {
+            CHUCKNORRIS => { return chucknorris(amount); }
+            IPSUM       => { return buildNotImplementedError(); }
+            SIMPSONS    => { return simpsons(amount); }
+            _           => { return buildNotImplementedError(); } // never reached as value validated above
+        }
     }
 }
 
 //
 // Validate all query parameters.
 //
+const string validFamilies = "'chucknorris', 'ipsum', 'simpsons'";
+
+enum ValidFamily {
+    CHUCKNORRIS = "chucknorris",
+    IPSUM       = "ipsum",
+    SIMPSONS    = "simpsons"
+}
+
 isolated function validate(string family, int? amount) returns ValidationError? {
-    match family {
-        "chucknorris" | "simpsons" => {} // valid white-listed values
-        _ => { 
-            return buildValidationError(string`Invalid family: '${family}'. Valid values: 'chucknorris', 'simpsons'.`);
-        }
+    if family !is ValidFamily {
+        return buildValidationError(string`Invalid family: '${family}'. Valid values: ${validFamilies}.`);
     }
     if amount is int && amount < 1 {
         return buildValidationError(string`Invalid amount: ${amount}. Valid values are positive integers greater than zero.`);
@@ -81,23 +90,54 @@ isolated function validate(string family, int? amount) returns ValidationError? 
 }
 
 //
+// Convert JSON structure to XML structure
+//
+isolated function convertJsonToXml(json? 'json) returns xml? {
+    if 'json is () {
+        return;
+    }
+    // xmlData module has hard-coded root element name :(
+    xml?|xmldata:Error x1 = xmldata:fromJson(checkpanic 'json.jokes, { arrayEntryTag: "joke" });
+    if x1 is xml {
+        // rename root element(s)
+        xml x2 = x1/*;
+        return xml`<response><jokes>${x2}</jokes></response>`;
+    }
+    return; // TODO xmldata:Error is ignored
+}
+
+//
 // Convert JSON error structure to XML error structure.
 //
 isolated function convertJsonErrorToXmlError(json? 'json) returns xml? {
-    // missing ability to define root element name, now hard-coded to <root>
-    xml?|xmldata:Error 'xml = xmldata:fromJson('json);
-    // TODO xmldata:Error is hidden
-    return 'xml is xml ? 'xml : ();
+    if 'json is () {
+        return;
+    }
+    // xmlData module has hard-coded root element name :(
+    xml?|xmldata:Error x1 = xmldata:fromJson('json);
+    if x1 is xml {
+        // rename root element(s)
+        xml x2 = x1/*;
+        return xml`<response><error>${x2}</error></response>`;
+    }
+    return; // TODO xmldata:Error is ignored
 }
 
 //
 // Application specific error types and error value builders
 //
+type ClientError         http:InternalServerError;
 type ImplementationError http:InternalServerError;
 type NotImplementedError http:InternalServerError;
 type ValidationError     http:BadRequest;
 
-type AllowedResponseType http:Ok|ImplementationError|NotImplementedError|ValidationError;
+type AllowedResponseType http:Ok|ClientError|ImplementationError|NotImplementedError|ValidationError;
+
+isolated function buildClientError(string details) returns ClientError {
+    return {
+        body: buildErrorRecord("CLIENT", details)
+    };
+}
 
 isolated function buildImplementationError(string details) returns ImplementationError {
     return {
