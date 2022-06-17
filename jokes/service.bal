@@ -2,6 +2,10 @@ import ballerina/http;
 import ballerina/log;
 import ballerina/xmldata;
 
+import jokes.chucknorris;
+import jokes.common;
+import jokes.simpsons;
+
 service /jokes/v1 on new http:Listener(9090) {
     isolated resource function get 'json (string family, int? amount) 
     returns 
@@ -11,7 +15,7 @@ service /jokes/v1 on new http:Listener(9090) {
     {
         log:printInfo("json2 (GET)", family = family, amount = amount);
 
-        AllowedResponseType response = impl(family, amount);
+        common:AllowedResponseType response = impl(family, amount);
 
         log:printInfo("json2 (GET)", response = response.toString());
         return response;
@@ -25,12 +29,24 @@ service /jokes/v1 on new http:Listener(9090) {
     {
         log:printInfo("xml (GET)", family = family, amount = amount);
 
-        AllowedResponseType response = impl(family, amount);
-        // TODO conversion functions can be refactored
-        if response is http:Ok {
-            response.body = convertJsonToXml(<json>response?.body);
-        } else {
-            response.body = convertJsonErrorToXmlError(<json>response?.body);
+        common:AllowedResponseType response = impl(family, amount);
+
+        // convert JSON to XML
+        do {
+            if response is http:Ok {
+                response.body = check convertJsonToXml(
+                    check (<json>response?.body).jokes,
+                    x => xml`<jokes>${x}</jokes>`,
+                    { arrayEntryTag: "joke" }
+                );
+            } else {
+                response.body = check convertJsonToXml(
+                    <json>response?.body,
+                    x => xml`<error>${x}</error>`
+                );
+            }
+        } on fail error err {
+            response = common:buildImplementationError(err.message());
         }
 
         log:printInfo("xml (GET)", response = response.toString());
@@ -42,10 +58,10 @@ service /jokes/v1 on new http:Listener(9090) {
 // Wrapper that quarantees the underlying code doesn't leak errors
 // but always returns valid return type.
 //
-isolated function impl(string family, int? amount) returns AllowedResponseType {
-    AllowedResponseType|error response = trap impl_(family, amount);
+isolated function impl(string family, int? amount) returns common:AllowedResponseType {
+    common:AllowedResponseType|error response = trap impl_(family, amount);
     if response is error {
-        return buildImplementationError(response.message());
+        return common:buildImplementationError(response.message());
     } else {
         return response;
     }
@@ -54,17 +70,30 @@ isolated function impl(string family, int? amount) returns AllowedResponseType {
 //
 // Actual implementation.
 //
-isolated function impl_(string family, int? amount) returns AllowedResponseType {
-    ValidationError? validationError = validate(family, amount);
-    if validationError is ValidationError {
+type DataSourceFunction isolated function(int?) returns common:AllowedResponseType;
+
+# Resolve actual data source function based on `family`.
+# + family - the data family
+# + return - data source function for `family`
+isolated function getDataSourceFunction(string family) returns DataSourceFunction {
+    var defaultDataSource = isolated function(int? amount) returns common:AllowedResponseType {
+        return common:buildNotImplementedError();
+    };
+    match family {
+        CHUCKNORRIS => { return chucknorris:facts; }
+        IPSUM       => { return defaultDataSource; }
+        SIMPSONS    => { return simpsons:quotes; }
+        _           => { return defaultDataSource; } // never reached as value validated above
+    }
+}
+
+isolated function impl_(string family, int? amount) returns common:AllowedResponseType {
+    common:ValidationError? validationError = validate(family, amount);
+    if validationError is common:ValidationError {
         return validationError;
     } else {
-        match family {
-            CHUCKNORRIS => { return chucknorris(amount); }
-            IPSUM       => { return buildNotImplementedError(); }
-            SIMPSONS    => { return simpsons(amount); }
-            _           => { return buildNotImplementedError(); } // never reached as value validated above
-        }
+        DataSourceFunction dsf = getDataSourceFunction(family);
+        return dsf(amount);
     }
 }
 
@@ -79,87 +108,31 @@ enum ValidFamily {
     SIMPSONS    = "simpsons"
 }
 
-isolated function validate(string family, int? amount) returns ValidationError? {
+isolated function validate(string family, int? amount) returns common:ValidationError? {
     if family !is ValidFamily {
-        return buildValidationError(string`Invalid family: '${family}'. Valid values: ${validFamilies}.`);
+        return common:buildValidationError(string`Invalid family: '${family}'. Valid values: ${validFamilies}.`);
     }
     if amount is int && amount < 1 {
-        return buildValidationError(string`Invalid amount: ${amount}. Valid values are positive integers greater than zero.`);
+        return common:buildValidationError(string`Invalid amount: ${amount}. Valid values are positive integers greater than zero.`);
     }
     return;
 }
 
-//
-// Convert JSON structure to XML structure
-//
-isolated function convertJsonToXml(json? 'json) returns xml? {
-    if 'json is () {
-        return;
-    }
-    // xmlData module has hard-coded root element name :(
-    xml?|xmldata:Error x1 = xmldata:fromJson(checkpanic 'json.jokes, { arrayEntryTag: "joke" });
+isolated function convertJsonToXml(
+    json 'json, 
+    (isolated function (xml 'xml) returns xml)? wrapper = (),
+    xmldata:JsonOptions jsonOptions = {}
+) returns xml|error {
+    xml? x1 = check xmldata:fromJson('json, jsonOptions);
     if x1 is xml {
-        // rename root element(s)
+        // rename top element from <root> to <response>
+        // and wrap the content if needed
         xml x2 = x1/*;
-        return xml`<response><jokes>${x2}</jokes></response>`;
+        if wrapper !is () {
+            return xml`<response>${wrapper(x2)}</response>`;    
+        } else {
+            return xml`<response>${x2}</response>`;
+        }
     }
-    return; // TODO xmldata:Error is ignored
-}
-
-//
-// Convert JSON error structure to XML error structure.
-//
-isolated function convertJsonErrorToXmlError(json? 'json) returns xml? {
-    if 'json is () {
-        return;
-    }
-    // xmlData module has hard-coded root element name :(
-    xml?|xmldata:Error x1 = xmldata:fromJson('json);
-    if x1 is xml {
-        // rename root element(s)
-        xml x2 = x1/*;
-        return xml`<response><error>${x2}</error></response>`;
-    }
-    return; // TODO xmldata:Error is ignored
-}
-
-//
-// Application specific error types and error value builders
-//
-type ClientError         http:InternalServerError;
-type ImplementationError http:InternalServerError;
-type NotImplementedError http:InternalServerError;
-type ValidationError     http:BadRequest;
-
-type AllowedResponseType http:Ok|ClientError|ImplementationError|NotImplementedError|ValidationError;
-
-isolated function buildClientError(string details) returns ClientError {
-    return {
-        body: buildErrorRecord("CLIENT", details)
-    };
-}
-
-isolated function buildImplementationError(string details) returns ImplementationError {
-    return {
-        body: buildErrorRecord("IMPLEMENTATION", details)
-    };
-}
-
-isolated function buildNotImplementedError() returns NotImplementedError {
-    return {
-        body: buildErrorRecord("NOT_IMPLEMENTED", "Unfortunately the implementation is not yet available. Please call back later.")
-    };
-}
-
-isolated function buildValidationError(string details) returns ValidationError {
-    return {
-        body: buildErrorRecord("VALIDATION", details)
-    };
-}
-
-isolated function buildErrorRecord(string code, string details) returns json {
-    return {
-        code: code,
-        details: details
-    };
+    return error("JSON to XML conversion failed.");
 }

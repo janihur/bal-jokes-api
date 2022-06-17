@@ -7,11 +7,38 @@ The humorous APIs are:
 * https://baconipsum.com/json-api/
 * https://thesimpsonsquoteapi.glitch.me
 
+## Tentative TODO-list
+Potential enhancements in no particular order:
+
+* https://ballerina.io/learn/test-ballerina-code/
+  * data providers
+  * mock functions
+* Ballerina `error` conversion to application specific JSON error structure
+  * enable error chaining and listing multiple errors
+* https://ballerina.io/learn/by-example/http-interceptors.html
+* Concurrency
+* https://ballerina.io/learn/cli-documentation/openapi/
+* https://ballerina.io/learn/by-example/cache-basics.html
+* https://ballerina.io/learn/generate-code-documentation/#write-ballerina-documentation
+
+
+## Ballerina commands
+Modules have configration so all commands require:
+```
+export BAL_CONFIG_FILES='Config.toml:modules/chucknorris/Config.toml:modules/simpsons/Config.toml'
+```
+
+Run unit tests:
+```
+bal test --test-report --code-coverage
+```
+
 ## How to call the API
 ### Using query parameters
 Supported query parameters:
-* `family` - valid values: `chucknorris`, `ipsum`, `simpsons`
-* `amount` - integer greater than zero
+* Mandatory: `family` - valid values: `chucknorris`, `ipsum`, `simpsons`
+* Optional: `amount` - integer greater than zero, defaults to 1.
+
 Examples:
 ```
 # get two simpsons jokes in json
@@ -22,6 +49,24 @@ curl -v 'http:/localhost:9090/jokes/v1/xml?family=simpsons&amount=2'
 
 ### Using JSON payload
 TODO
+
+* `amount` is optional. Default value is 1.
+* The same family can be listed any number of times and the total sum is calculated.
+
+Example:
+```
+{
+  "requests": [
+    {
+      "family": "chucknorris",
+      "amount": 2
+    },
+    {
+      "family": "simpsons"
+    }
+  ]
+}
+```
 
 ### Using XML payload
 TODO
@@ -86,7 +131,12 @@ curl -v https://api.chucknorris.io/jokes/random
 ```
 
 ## Using Bacon Ipsum API
-TODO
+```
+curl -v 'https://baconipsum.com/api/?type=meat-and-filler&sentences=1&start-with-lorem=1'
+```
+```
+["Bacon ipsum dolor amet short ribs fatback cow proident, pork loin corned beef voluptate occaecat dolor tenderloin do nostrud sint biltong anim."]
+```
 
 ## Using Simpsons API
 ```

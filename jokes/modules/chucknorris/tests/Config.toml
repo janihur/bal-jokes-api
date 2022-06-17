@@ -1,0 +1,2 @@
+[jokes.chucknorris]
+CHUCKNORRIS_URL = "https://api.chucknorris.io/jokes/"

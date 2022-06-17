@@ -309,7 +309,10 @@ dependencies = [
 	{org = "ballerinai", name = "observe"}
 ]
 modules = [
-	{org = "jani", packageName = "jokes", moduleName = "jokes"}
+	{org = "jani", packageName = "jokes", moduleName = "jokes"},
+	{org = "jani", packageName = "jokes", moduleName = "jokes.chucknorris"},
+	{org = "jani", packageName = "jokes", moduleName = "jokes.common"},
+	{org = "jani", packageName = "jokes", moduleName = "jokes.simpsons"}
 ]
 
 

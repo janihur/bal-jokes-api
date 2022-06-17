@@ -1,6 +1,10 @@
-CHUCKNORRIS_URL = "https://api.chucknorris.io/jokes/"
-SIMPSONS_URL = "https://thesimpsonsquoteapi.glitch.me/"
-
 [ballerina.http.accessLogConfig]
 console = true
 path = "access.log"
+
+[jokes.chucknorris]
+CHUCKNORRIS_URL = "https://api.chucknorris.io/jokes/"
+
+[jokes.simpsons]
+SIMPSONS_URL = "https://thesimpsonsquoteapi.glitch.me/"
+
